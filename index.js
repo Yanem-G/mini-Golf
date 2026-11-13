@@ -36,7 +36,7 @@ const world = new CANNON.World({
 // Friction / Restitution
 const defaultMaterial = new CANNON.Material('default');
 const contactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
-    friction: 0.7,
+    friction: 0.4,
     restitution: 0.2
 });
 world.addContactMaterial(contactMaterial);
@@ -79,7 +79,9 @@ golfBody.linearDamping = 0.25; // ralentit le déplacement de la balle
 golfBody.angularDamping = 0.5; // ralentit sa rotation
 world.addBody(golfBody);
 
-const physicsObjects = [];
+const previousBallPosition = golfBody.position.clone();
+
+const physicsObjects = []; //list des obstacles ajouté
 
 // Fonction d'ajout d'obstacles
 function addBoxObstacle(position, size, color = 0x8b4513) {
@@ -267,6 +269,18 @@ function animate(){
 
     golf.position.copy(golfBody.position);
     golf.quaternion.copy(golfBody.quaternion);
+
+    const ballMovement = golfBody.position.vsub(previousBallPosition);
+
+    camera.position.x += ballMovement.x;
+    camera.position.y += ballMovement.y;
+    camera.position.z += ballMovement.z;
+
+    controls.target.x += ballMovement.x;
+    controls.target.y += ballMovement.y;
+    controls.target.z += ballMovement.z;
+
+    previousBallPosition.copy(golfBody.position);
 
     for (const { mesh, body } of physicsObjects) {
       mesh.position.copy(body.position);
