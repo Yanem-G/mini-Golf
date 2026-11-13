@@ -42,10 +42,10 @@ const contactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMater
 world.addContactMaterial(contactMaterial);
 
 //Ground
-const groundGeometry = new THREE.PlaneGeometry(20,20,10);
+const groundThickness = 0.5;
+const groundGeometry = new THREE.BoxGeometry(20, groundThickness, 20);
 const groundMateriel = new THREE.MeshStandardMaterial({
   color: 0x2e8b57,
-  side: THREE.DoubleSide,
   roughness: 0.9,
   metalness: 0
 });
@@ -62,11 +62,11 @@ golf.castShadow = true;
 scene.add(golf);
 
 const groundBody = new CANNON.Body({
-    shape : new CANNON.Plane(),
-    type : CANNON.Body.Static, //mass 0
-    material : defaultMaterial
+    shape: new CANNON.Box(new CANNON.Vec3(10, groundThickness / 2, 10)),
+    type: CANNON.Body.Static, //mass 0
+    material: defaultMaterial,
+    position: new CANNON.Vec3(0, -groundThickness / 2, 0)
 });
-groundBody.quaternion.setFromEuler(-Math.PI/ 2,0,0);
 world.addBody(groundBody);
 
 const golfBody = new CANNON.Body({
@@ -298,6 +298,20 @@ function animate(){
       golfBody.velocity.setZero();
       golfBody.angularVelocity.setZero();
       console.log("Bravo ! La balle est dans le trou.");
+    }
+
+    // Détection de chute dans le vide (hors de la map)
+    if (golfBody.position.y < -5) {
+      isDragging = false;
+      arrowHelper.visible = false;
+      controls.enabled = true;
+      golfBody.velocity.setZero();
+      golfBody.angularVelocity.setZero();
+      golfBody.position.set(1, 1, 1);
+      previousBallPosition.copy(golfBody.position);
+      camera.position.set(10, 5, 3);
+      controls.target.set(0, 0, 0);
+      console.log("La balle est tombée dans le vide ! Réinitialisation...");
     }
 
     controls.update();
