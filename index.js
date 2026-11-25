@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import * as CANNON from "cannon-es";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { createMap as createMap1 } from "./map1.js";
+import { createMap as createMap2 } from "./map2.js";
 
 //renderer
 const renderer = new THREE.WebGLRenderer();
@@ -19,7 +21,7 @@ const camera = new THREE.PerspectiveCamera(
   window.innerWidth / window.innerHeight,
   0.1,
   1000);
-camera.position.set(10, 5, 3);
+camera.position.set(0, 5, -5);
 
 //light
 const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -74,97 +76,25 @@ const golfBody = new CANNON.Body({
     mass:1,
     material : defaultMaterial
 });
-golfBody.position.set(1, 1, 1);
+golfBody.position.set(0, 1, 0);
 golfBody.linearDamping = 0.25; // ralentit le déplacement de la balle
 golfBody.angularDamping = 0.5; // ralentit sa rotation
 world.addBody(golfBody);
 
 const previousBallPosition = golfBody.position.clone();
 
-const physicsObjects = []; //list des obstacles ajouté
+const physicsObjects = [];
+const mapFactories = [createMap1, createMap2];
+let currentMapIndex = 0;
+let activeMap = mapFactories[currentMapIndex]({
+  scene,
+  world,
+  defaultMaterial
+});
+let holePosition = activeMap.holePosition;
+let holeRadius = activeMap.holeRadius;
+physicsObjects.push(...activeMap.physicsObjects);
 
-// Fonction d'ajout d'obstacles
-function addBoxObstacle(position, size, color = 0x8b4513) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(size.x, size.y, size.z),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
-  );
-  mesh.position.set(position.x, position.y, position.z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  const body = new CANNON.Body({
-    type: CANNON.Body.Static,
-    material: defaultMaterial,
-    shape: new CANNON.Box(
-      new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2)
-    )
-  });
-  body.position.set(position.x, position.y, position.z);
-  world.addBody(body);
-  physicsObjects.push({ mesh, body });
-}
-
-function addCylinderObstacle(position, radius, height, color = 0x8b4513) {
-  const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, height, 24),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.8 })
-  );
-  mesh.position.set(position.x, position.y, position.z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  const body = new CANNON.Body({
-    type: CANNON.Body.Static,
-    material: defaultMaterial,
-    shape: new CANNON.Cylinder(radius, radius, height, 24)
-  });
-  body.position.set(position.x, position.y, position.z);
-  world.addBody(body);
-  physicsObjects.push({ mesh, body });
-}
-
-addBoxObstacle({ x: -1, y: 0.5, z: 0 }, { x: 0.8, y: 1, z: 3 });
-addBoxObstacle({ x: 2, y: 0.35, z: -2 }, { x: 3, y: 0.7, z: 0.7 });
-addCylinderObstacle({ x: 3, y: 0.5, z: 1 }, 0.5, 1);
-
-// Mur de Bordures
-addBoxObstacle({ x: -10, y: 0.35, z: 0 }, { x: 0.7, y: 0.7, z: 20 });
-addBoxObstacle({ x: 10, y: 0.35, z: 0 }, { x: 0.7, y: 0.7, z: 20 });
-addBoxObstacle({ x: 0, y: 0.35, z: 10 }, { x: 20, y: 0.7, z: 0.7 });
-addBoxObstacle({ x: 0, y: 0.35, z: -10 }, { x: 20, y: 0.7, z: 0.7 });
-
-// Hole + Flag
-const holePosition = new THREE.Vector3(4, 0, -3);
-const holeRadius = 0.45;
-const hole = new THREE.Mesh(
-  new THREE.CylinderGeometry(holeRadius, holeRadius, 0.03, 32),
-  new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 })
-);
-hole.position.copy(holePosition);
-hole.position.y = 0.015;
-hole.receiveShadow = true;
-scene.add(hole);
-
-const flagPole = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.025, 0.025, 2, 12),
-  new THREE.MeshStandardMaterial({ color: 0xffffff })
-);
-flagPole.position.set(holePosition.x, 1, holePosition.z);
-flagPole.castShadow = true;
-scene.add(flagPole);
-
-const flag = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.7, 0.4),
-  new THREE.MeshStandardMaterial({
-    color: 0xff3333,
-    side: THREE.DoubleSide
-  })
-);
-flag.position.set(holePosition.x + 0.35, 1.7, holePosition.z);
-scene.add(flag);
 
 let holeCompleted = false;
 const timeStamp = 1/60;
@@ -192,6 +122,70 @@ let dragStart = { x: 0, y: 0 };
 let shootPower = 0;
 const shootDirection = new THREE.Vector3();
 
+function removeMesh(mesh) {
+  scene.remove(mesh);
+  mesh.geometry.dispose();
+
+  const materials = Array.isArray(mesh.material)
+    ? mesh.material
+    : [mesh.material];
+
+  for (const meshMaterial of materials) {
+    meshMaterial.dispose();
+  }
+}
+
+function switchToNextMap() {
+  if (currentMapIndex >= mapFactories.length - 1) {
+    console.log("Bravo ! Toutes les maps sont terminées.");
+    return;
+  }
+
+  const cameraOffset = camera.position.clone().sub(controls.target);
+
+  for (const { mesh, body } of activeMap.physicsObjects) {
+    world.removeBody(body);
+    removeMesh(mesh);
+  }
+
+  for (const mesh of activeMap.visualObjects) {
+    removeMesh(mesh);
+  }
+
+  physicsObjects.length = 0;
+  currentMapIndex += 1;
+  activeMap = mapFactories[currentMapIndex]({
+    scene,
+    world,
+    defaultMaterial
+  });
+  physicsObjects.push(...activeMap.physicsObjects);
+
+  holePosition = activeMap.holePosition;
+  holeRadius = activeMap.holeRadius;
+
+  golfBody.position.set(0, 1, 0);
+  golfBody.velocity.setZero();
+  golfBody.angularVelocity.setZero();
+  golfBody.force.setZero();
+  golfBody.torque.setZero();
+  golfBody.wakeUp();
+
+  golf.position.copy(golfBody.position);
+  golf.visible = true;
+  previousBallPosition.copy(golfBody.position);
+
+  holeCompleted = false;
+  isDragging = false;
+  shootPower = 0;
+  arrowHelper.visible = false;
+  controls.enabled = true;
+
+  controls.target.copy(golfBody.position);
+  camera.position.copy(golfBody.position).add(cameraOffset);
+  controls.update();
+}
+
 window.addEventListener("pointerdown", (event) => {
   if (holeCompleted || golfBody.velocity.length() > 0.2) {
     return;
@@ -212,7 +206,7 @@ window.addEventListener("pointermove", (event) => {
   const dx = dragStart.x - event.clientX;
   const dy = dragStart.y - event.clientY;
 
-  shootPower = Math.min(Math.hypot(dx, dy) / 10, 25);
+  shootPower = Math.min(Math.hypot(dx, dy) / 10, 50);
 
   const cameraDirection = new THREE.Vector3();
   camera.getWorldDirection(cameraDirection);
@@ -298,7 +292,12 @@ function animate(){
       golfBody.velocity.setZero();
       golfBody.angularVelocity.setZero();
       console.log("Bravo ! La balle est dans le trou.");
-      // alert("Bravo ! La balle est dans le trou.");
+
+      if (currentMapIndex < mapFactories.length - 1) {
+        window.setTimeout(switchToNextMap, 1000);
+      } else {
+        console.log("Bravo ! Toutes les maps sont terminées.");
+      }
     }
 
     // Détection de chute dans le vide (hors de la map)
