@@ -36,8 +36,8 @@ const world = new CANNON.World({
 // Friction / Restitution
 const defaultMaterial = new CANNON.Material('default');
 const contactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
-    friction: 0.4,
-    restitution: 0.2
+    friction: 0.1,
+    restitution: 0.45
 });
 world.addContactMaterial(contactMaterial);
 
@@ -252,7 +252,7 @@ window.addEventListener("pointerup", () => {
       shootDirection.z * shootPower
     );
 
-    golfBody.applyImpulse(impulse, golfBody.position);
+    golfBody.applyImpulse(impulse);
   }
 
   shootPower = 0;
@@ -298,6 +298,7 @@ function animate(){
       golfBody.velocity.setZero();
       golfBody.angularVelocity.setZero();
       console.log("Bravo ! La balle est dans le trou.");
+      // alert("Bravo ! La balle est dans le trou.");
     }
 
     // Détection de chute dans le vide (hors de la map)
