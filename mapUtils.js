@@ -144,6 +144,7 @@ export function createHoleAndFlag({ scene }, position, holeRadius = 0.45) {
     holePosition.y + 1.7,
     holePosition.z
   );
+  flag.castShadow = true;
   scene.add(flag);
 
   return { holePosition, holeRadius, hole, flagPole, flag };

@@ -6,8 +6,9 @@ import { createMap as createMap2 } from "./map2.js";
 import { createMap as createMap3 } from "./map3.js";
 
 //renderer
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
@@ -25,11 +26,24 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, 5, -5);
 
 //light
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 10, 5);
+const light = new THREE.DirectionalLight(0xffffff, 2.2);
+light.position.set(28, 38, -2);
+light.target.position.set(8, 1, 18);
+light.castShadow = true;
+light.shadow.mapSize.set(2048, 2048);
+light.shadow.camera.left = -35;
+light.shadow.camera.right = 35;
+light.shadow.camera.top = 35;
+light.shadow.camera.bottom = -35;
+light.shadow.camera.near = 10;
+light.shadow.camera.far = 90;
+light.shadow.bias = -0.0005;
+light.shadow.normalBias = 0.02;
 scene.add(light);
+scene.add(light.target);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+scene.add(new THREE.HemisphereLight(0x87ceeb, 0x2b5a3a, 0.7));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
 //World Physics
 const world = new CANNON.World({
@@ -62,6 +76,7 @@ const geometry = new THREE.SphereGeometry(radius);
 const material = new THREE.MeshStandardMaterial( { color: 0xffffff  ,roughness: 0.4} ); 
 const golf = new THREE.Mesh( geometry, material ); 
 golf.castShadow = true;
+golf.receiveShadow = true;
 scene.add(golf);
 
 const groundBody = new CANNON.Body({
@@ -104,6 +119,13 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 controls.target.copy(ground.position);
 controls.enableDamping = true;
+controls.enablePan = false;
+controls.enableRotate = false;
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.PAN
+};
 controls.minDistance = 2;
 controls.maxDistance = 10;
 
@@ -119,9 +141,29 @@ arrowHelper.visible = false;
 scene.add(arrowHelper);
 
 let isDragging = false;
+let isCtrlPressed = false;
+let isOrbitDragging = false;
 let dragStart = { x: 0, y: 0 };
 let shootPower = 0;
 const shootDirection = new THREE.Vector3();
+
+function cancelBallDrag() {
+  isDragging = false;
+  shootPower = 0;
+  arrowHelper.visible = false;
+}
+
+function syncControlsWithModifier(ctrlPressed) {
+  isCtrlPressed = ctrlPressed;
+  controls.enableRotate = ctrlPressed;
+
+  if (ctrlPressed) {
+    controls.enabled = true;
+    cancelBallDrag();
+  } else {
+    controls.enabled = !isOrbitDragging;
+  }
+}
 
 function removeMesh(mesh) {
   scene.remove(mesh);
@@ -177,18 +219,72 @@ function switchToNextMap() {
   previousBallPosition.copy(golfBody.position);
 
   holeCompleted = false;
-  isDragging = false;
-  shootPower = 0;
-  arrowHelper.visible = false;
-  controls.enabled = true;
+  cancelBallDrag();
+  syncControlsWithModifier(isCtrlPressed);
 
   controls.target.copy(golfBody.position);
   camera.position.copy(golfBody.position).add(cameraOffset);
   controls.update();
 }
 
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Control" || event.ctrlKey) {
+    syncControlsWithModifier(true);
+  }
+});
+
+window.addEventListener("keyup", (event) => {
+  if (event.key === "Control" || !event.ctrlKey) {
+    syncControlsWithModifier(false);
+  }
+});
+
+window.addEventListener("blur", () => {
+  cancelBallDrag();
+  syncControlsWithModifier(false);
+});
+
+window.addEventListener(
+  "pointerdown",
+  (event) => {
+    isOrbitDragging = event.ctrlKey;
+    syncControlsWithModifier(event.ctrlKey);
+
+    if (!event.ctrlKey) {
+      controls.enabled = false;
+    }
+  },
+  { capture: true }
+);
+
+window.addEventListener(
+  "pointermove",
+  (event) => {
+    if (isOrbitDragging && !event.ctrlKey) {
+      syncControlsWithModifier(false);
+    }
+  },
+  { capture: true }
+);
+
+function handlePointerEndCapture() {
+  if (isOrbitDragging) {
+    // Allow OrbitControls' pointerup listener to clean up internal drag state.
+    controls.enabled = true;
+  }
+}
+
+window.addEventListener("pointerup", handlePointerEndCapture, { capture: true });
+window.addEventListener("pointercancel", handlePointerEndCapture, { capture: true });
+
 window.addEventListener("pointerdown", (event) => {
-  if (holeCompleted || golfBody.velocity.length() > 0.2) {
+  if (
+    event.ctrlKey ||
+    isCtrlPressed ||
+    event.button !== 0 ||
+    holeCompleted ||
+    golfBody.velocity.length() > 0.2
+  ) {
     return;
   }
 
@@ -196,10 +292,16 @@ window.addEventListener("pointerdown", (event) => {
   dragStart.x = event.clientX;
   dragStart.y = event.clientY;
   arrowHelper.visible = true;
-  controls.enabled = false;
 });
 
 window.addEventListener("pointermove", (event) => {
+  if (event.ctrlKey || isCtrlPressed) {
+    if (isDragging) {
+      cancelBallDrag();
+    }
+    return;
+  }
+
   if (!isDragging) {
     return;
   }
@@ -231,16 +333,10 @@ window.addEventListener("pointermove", (event) => {
   arrowHelper.setLength(1 + shootPower / 5);
 });
 
-window.addEventListener("pointerup", () => {
-  if (!isDragging) {
-    return;
-  }
+function handlePointerEnd(event) {
+  isOrbitDragging = false;
 
-  isDragging = false;
-  arrowHelper.visible = false;
-  controls.enabled = true;
-
-  if (shootPower > 0.5) {
+  if (isDragging && !event.ctrlKey && !isCtrlPressed && shootPower > 0.5) {
     const impulse = new CANNON.Vec3(
       shootDirection.x * shootPower,
       0,
@@ -250,7 +346,15 @@ window.addEventListener("pointerup", () => {
     golfBody.applyImpulse(impulse);
   }
 
-  shootPower = 0;
+  cancelBallDrag();
+  syncControlsWithModifier(event.ctrlKey);
+}
+
+window.addEventListener("pointerup", handlePointerEnd);
+window.addEventListener("pointercancel", (event) => {
+  isOrbitDragging = false;
+  cancelBallDrag();
+  syncControlsWithModifier(event.ctrlKey);
 });
 
 
@@ -303,9 +407,8 @@ function animate(){
 
     // Détection de chute dans le vide (hors de la map)
     if (golfBody.position.y < -5) {
-      isDragging = false;
-      arrowHelper.visible = false;
-      controls.enabled = true;
+      cancelBallDrag();
+      syncControlsWithModifier(isCtrlPressed);
       golfBody.velocity.setZero();
       golfBody.angularVelocity.setZero();
       golfBody.position.set(1, 1, 1);
