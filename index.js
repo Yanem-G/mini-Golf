@@ -100,9 +100,14 @@ world.addBody(golfBody);
 const previousBallPosition = golfBody.position.clone();
 
 const physicsObjects = [];
-const mapFactories = [createMap1, createMap2, createMap3];
+const levels = [
+  { label: "L1", name: "Level 1", par: 3, create: createMap1 },
+  { label: "L2", name: "Level 2", par: 4, create: createMap2 },
+  { label: "L3", name: "Level 3", par: 4, create: createMap3 }
+];
+const levelScores = levels.map(() => null);
 let currentMapIndex = 0;
-let activeMap = mapFactories[currentMapIndex]({
+let activeMap = levels[currentMapIndex].create({
   scene,
   world,
   defaultMaterial
@@ -111,9 +116,120 @@ let holePosition = activeMap.holePosition;
 let holeRadius = activeMap.holeRadius;
 physicsObjects.push(...activeMap.physicsObjects);
 
-
 let holeCompleted = false;
+let strokes = 0;
+const MAX_SHOOT_POWER = 50;
 const timeStamp = 1/60;
+
+const levelButtonsContainer = document.getElementById("level-buttons");
+const prevLevelBtn = document.getElementById("prev-level-btn");
+const nextLevelBtn = document.getElementById("next-level-btn");
+const resetBtn = document.getElementById("reset-btn");
+const strokesValueEl = document.getElementById("strokes-value");
+const totalStrokesValueEl = document.getElementById("total-strokes-value");
+const powerFillEl = document.getElementById("power-fill");
+const powerValueEl = document.getElementById("power-value");
+const levelModalEl = document.getElementById("level-modal");
+const modalKickerEl = document.getElementById("modal-kicker");
+const modalTitleEl = document.getElementById("modal-title");
+const modalScoreTagEl = document.getElementById("modal-score-tag");
+const modalStrokesEl = document.getElementById("modal-strokes");
+const modalParEl = document.getElementById("modal-par");
+const modalTotalEl = document.getElementById("modal-total");
+const modalScorecardEl = document.getElementById("modal-scorecard");
+const modalRestartBtn = document.getElementById("modal-restart-btn");
+const modalNextBtn = document.getElementById("modal-next-btn");
+
+const levelButtonEls = levels.map((level, index) => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "hud-btn";
+  button.textContent = level.name;
+  button.addEventListener("click", () => {
+    loadMap(index);
+  });
+  levelButtonsContainer.appendChild(button);
+  return button;
+});
+
+function getTotalStrokes() {
+  return levelScores.reduce(
+    (sum, score, index) => sum + (index === currentMapIndex ? strokes : score ?? 0),
+    0
+  );
+}
+
+function formatParResult(holeStrokes, par) {
+  if (holeStrokes === 1) {
+    return "Hole in One";
+  }
+
+  const diff = holeStrokes - par;
+  if (diff === -2) return "Eagle (-2)";
+  if (diff === -1) return "Birdie (-1)";
+  if (diff === 0) return "Even Par";
+  if (diff === 1) return "Bogey (+1)";
+  if (diff === 2) return "Double Bogey (+2)";
+  return diff < 0 ? `${diff} Under Par` : `+${diff} Over Par`;
+}
+
+function updatePowerUI(power) {
+  const percent = Math.round((power / MAX_SHOOT_POWER) * 100);
+  powerFillEl.style.width = `${percent}%`;
+  powerValueEl.textContent = `${percent}%`;
+}
+
+function updateHudUI() {
+  strokesValueEl.textContent = String(strokes);
+  totalStrokesValueEl.textContent = String(getTotalStrokes());
+  prevLevelBtn.disabled = currentMapIndex === 0;
+  nextLevelBtn.disabled = currentMapIndex === levels.length - 1;
+
+  levelButtonEls.forEach((button, index) => {
+    button.classList.toggle("active", index === currentMapIndex);
+  });
+}
+
+function showLevelModal() {
+  const currentLevel = levels[currentMapIndex];
+  const isFinalLevel = currentMapIndex === levels.length - 1;
+  const total = getTotalStrokes();
+  const isOverPar = strokes > currentLevel.par;
+
+  modalKickerEl.textContent = `${currentLevel.name} Complete`;
+  modalTitleEl.textContent = isFinalLevel ? "Course Complete" : "Hole Completed";
+  modalScoreTagEl.textContent = formatParResult(strokes, currentLevel.par);
+  modalScoreTagEl.classList.toggle("over", isOverPar);
+
+  modalStrokesEl.textContent = String(strokes);
+  modalParEl.textContent = String(currentLevel.par);
+  modalTotalEl.textContent = String(total);
+
+  modalScorecardEl.replaceChildren(
+    ...levels.map((level, index) => {
+      const item = document.createElement("div");
+      item.className = "scorecard-item";
+      const label = document.createElement("span");
+      label.textContent = level.label;
+      const value = document.createElement("strong");
+      value.textContent = levelScores[index] === null ? "-" : String(levelScores[index]);
+      item.append(label, value);
+      return item;
+    })
+  );
+
+  modalNextBtn.textContent = isFinalLevel ? "Play Again" : "Next Level";
+  modalNextBtn.onclick = isFinalLevel
+    ? () => loadMap(0, { resetTotal: true })
+    : switchToNextMap;
+
+  levelModalEl.hidden = false;
+}
+
+function hideLevelModal() {
+  levelModalEl.hidden = true;
+  modalNextBtn.onclick = null;
+}
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
@@ -151,6 +267,7 @@ function cancelBallDrag() {
   isDragging = false;
   shootPower = 0;
   arrowHelper.visible = false;
+  updatePowerUI(0);
 }
 
 function syncControlsWithModifier(ctrlPressed) {
@@ -178,9 +295,8 @@ function removeMesh(mesh) {
   }
 }
 
-function switchToNextMap() {
-  if (currentMapIndex >= mapFactories.length - 1) {
-    console.log("Bravo ! Toutes les maps sont terminées.");
+function loadMap(targetIndex, { resetTotal = false } = {}) {
+  if (targetIndex < 0 || targetIndex >= levels.length) {
     return;
   }
 
@@ -191,13 +307,13 @@ function switchToNextMap() {
     removeMesh(mesh);
   }
 
-  for (const mesh of activeMap.visualObjects) {
+  for (const mesh of activeMap.visualObjects ?? []) {
     removeMesh(mesh);
   }
 
   physicsObjects.length = 0;
-  currentMapIndex += 1;
-  activeMap = mapFactories[currentMapIndex]({
+  currentMapIndex = targetIndex;
+  activeMap = levels[currentMapIndex].create({
     scene,
     world,
     defaultMaterial
@@ -219,13 +335,48 @@ function switchToNextMap() {
   previousBallPosition.copy(golfBody.position);
 
   holeCompleted = false;
+  strokes = 0;
+  if (resetTotal) {
+    levelScores.fill(null);
+  } else {
+    levelScores[currentMapIndex] = null;
+  }
+  hideLevelModal();
   cancelBallDrag();
   syncControlsWithModifier(isCtrlPressed);
+  updateHudUI();
 
   controls.target.copy(golfBody.position);
   camera.position.copy(golfBody.position).add(cameraOffset);
   controls.update();
 }
+
+function switchToNextMap() {
+  if (currentMapIndex >= levels.length - 1) {
+    return;
+  }
+
+  loadMap(currentMapIndex + 1);
+}
+
+prevLevelBtn.addEventListener("click", () => {
+  loadMap(currentMapIndex - 1);
+});
+
+nextLevelBtn.addEventListener("click", () => {
+  loadMap(currentMapIndex + 1);
+});
+
+resetBtn.addEventListener("click", () => {
+  loadMap(currentMapIndex);
+});
+
+modalRestartBtn.addEventListener("click", () => {
+  loadMap(currentMapIndex);
+});
+
+updateHudUI();
+updatePowerUI(0);
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Control" || event.ctrlKey) {
@@ -247,6 +398,10 @@ window.addEventListener("blur", () => {
 window.addEventListener(
   "pointerdown",
   (event) => {
+    if (event.target !== renderer.domElement) {
+      return;
+    }
+
     isOrbitDragging = event.ctrlKey;
     syncControlsWithModifier(event.ctrlKey);
 
@@ -279,6 +434,7 @@ window.addEventListener("pointercancel", handlePointerEndCapture, { capture: tru
 
 window.addEventListener("pointerdown", (event) => {
   if (
+    event.target !== renderer.domElement ||
     event.ctrlKey ||
     isCtrlPressed ||
     event.button !== 0 ||
@@ -309,7 +465,8 @@ window.addEventListener("pointermove", (event) => {
   const dx = dragStart.x - event.clientX;
   const dy = dragStart.y - event.clientY;
 
-  shootPower = Math.min(Math.hypot(dx, dy) / 10, 50);
+  shootPower = Math.min(Math.hypot(dx, dy) / 10, MAX_SHOOT_POWER);
+  updatePowerUI(shootPower);
 
   const cameraDirection = new THREE.Vector3();
   camera.getWorldDirection(cameraDirection);
@@ -344,6 +501,8 @@ function handlePointerEnd(event) {
     );
 
     golfBody.applyImpulse(impulse);
+    strokes += 1;
+    updateHudUI();
   }
 
   cancelBallDrag();
@@ -396,13 +555,10 @@ function animate(){
       golf.visible = false;
       golfBody.velocity.setZero();
       golfBody.angularVelocity.setZero();
-      console.log("Bravo ! La balle est dans le trou.");
-
-      if (currentMapIndex < mapFactories.length - 1) {
-        window.setTimeout(switchToNextMap, 1000);
-      } else {
-        console.log("Bravo ! Toutes les maps sont terminées.");
-      }
+      cancelBallDrag();
+      levelScores[currentMapIndex] = strokes;
+      updateHudUI();
+      showLevelModal();
     }
 
     // Détection de chute dans le vide (hors de la map)

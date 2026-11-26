@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-    <title>Document</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+    <title>Mini Golf</title>
 </head>
 <body>
     <script type="importmap">
@@ -24,13 +24,364 @@
         height: 100%;
         margin: 0;
         overflow: hidden;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #f3f5f7;
+        user-select: none;
     }
 
     canvas {
         display: block;
     }
+
+    .hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        padding: 16px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .hud-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .panel {
+        pointer-events: auto;
+        background: rgba(20, 24, 28, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        padding: 8px 12px;
+    }
+
+    .nav-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .nav-label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #a9b4be;
+        margin-right: 4px;
+    }
+
+    .btn-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .hud-btn {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: #f3f5f7;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .hud-btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    .hud-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    .hud-btn.active {
+        background: #2e8b57;
+        border-color: #3aa76d;
+        color: #ffffff;
+    }
+
+    .divider {
+        width: 1px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.14);
+        margin: 0 2px;
+    }
+
+    .stats-panel {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: #a9b4be;
+    }
+
+    .stat-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: #ffffff;
+    }
+
+    .power-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .power-track {
+        width: 90px;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .power-fill {
+        width: 0%;
+        height: 100%;
+        background: #3aa76d;
+    }
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(10, 14, 18, 0.56);
+        pointer-events: auto;
+        z-index: 10;
+    }
+
+    .modal-backdrop[hidden] {
+        display: none;
+    }
+
+    .modal-card {
+        width: 100%;
+        max-width: 360px;
+        background: #181d22;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 8px;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .modal-kicker {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #8fa0b0;
+    }
+
+    .modal-title {
+        margin: 4px 0 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #ffffff;
+    }
+
+    .score-tag {
+        font-size: 12px;
+        font-weight: 600;
+        color: #c8f0d8;
+        background: rgba(46, 139, 87, 0.24);
+        border: 1px solid rgba(58, 167, 109, 0.45);
+        border-radius: 4px;
+        padding: 4px 8px;
+        white-space: nowrap;
+    }
+
+    .score-tag.over {
+        color: #f0d7b8;
+        background: rgba(180, 120, 48, 0.2);
+        border-color: rgba(210, 145, 70, 0.4);
+    }
+
+    .score-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin: 16px 0 12px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .score-cell {
+        background: #111519;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        padding: 10px 8px;
+        text-align: center;
+    }
+
+    .score-cell-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #8fa0b0;
+    }
+
+    .score-cell-value {
+        margin-top: 4px;
+        font-size: 20px;
+        font-weight: 600;
+        color: #ffffff;
+    }
+
+    .scorecard {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .scorecard-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 4px;
+        padding: 5px 8px;
+        font-size: 12px;
+        color: #a9b4be;
+    }
+
+    .scorecard-item strong {
+        color: #ffffff;
+        font-weight: 600;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .modal-btn {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .hud-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+
+    .controls-hint {
+        pointer-events: none;
+        font-size: 12px;
+        color: #d6dde3;
+        padding: 6px 10px;
+    }
     </style>
-    
+
+    <div class="hud">
+        <div class="hud-top">
+            <div class="panel nav-bar" aria-label="Level navigation">
+                <span class="nav-label">Course</span>
+                <div class="btn-group">
+                    <button type="button" class="hud-btn" id="prev-level-btn">Prev</button>
+                    <div class="btn-group" id="level-buttons"></div>
+                    <button type="button" class="hud-btn" id="next-level-btn">Next</button>
+                </div>
+                <span class="divider" aria-hidden="true"></span>
+                <button type="button" class="hud-btn" id="reset-btn">Reset</button>
+            </div>
+
+            <div class="panel stats-panel" aria-label="Game stats">
+                <div class="stat">
+                    <span class="stat-label">Strokes</span>
+                    <span class="stat-value" id="strokes-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Total</span>
+                    <span class="stat-value" id="total-strokes-value">0</span>
+                </div>
+                <div class="power-wrap">
+                    <span class="stat-label">Power</span>
+                    <div class="power-track">
+                        <div class="power-fill" id="power-fill"></div>
+                    </div>
+                    <span class="stat-value" id="power-value">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hud-bottom">
+            <div class="panel controls-hint">
+                Drag: Aim and shoot &nbsp;|&nbsp; Ctrl + Drag: Rotate camera &nbsp;|&nbsp; Scroll: Zoom
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="level-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-kicker" id="modal-kicker"></div>
+                    <h2 class="modal-title" id="modal-title"></h2>
+                </div>
+                <span class="score-tag" id="modal-score-tag"></span>
+            </div>
+
+            <div class="score-grid">
+                <div class="score-cell">
+                    <div class="score-cell-label">Strokes</div>
+                    <div class="score-cell-value" id="modal-strokes">0</div>
+                </div>
+                <div class="score-cell">
+                    <div class="score-cell-label">Par</div>
+                    <div class="score-cell-value" id="modal-par">0</div>
+                </div>
+                <div class="score-cell">
+                    <div class="score-cell-label">Total</div>
+                    <div class="score-cell-value" id="modal-total">0</div>
+                </div>
+            </div>
+
+            <div class="scorecard" id="modal-scorecard"></div>
+
+            <div class="modal-actions">
+                <button type="button" class="hud-btn modal-btn" id="modal-restart-btn">Restart</button>
+                <button type="button" class="hud-btn active modal-btn" id="modal-next-btn">Next Level</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="index.js"></script>
 </body>
 </html>

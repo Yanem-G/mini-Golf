@@ -176,7 +176,7 @@ export function createMap({ scene, world, defaultMaterial }) {
   // 4. TROU ET DRAPEAU À LA FIN DU COULOIR (surface y = 0)
   // =========================================================================
   const holeRadius = 0.45;
-  const { holePosition } = createHoleAndFlag(
+  const holeVisuals = createHoleAndFlag(
     context,
     { x: 0, y: 0, z: 42 },
     holeRadius
@@ -184,7 +184,12 @@ export function createMap({ scene, world, defaultMaterial }) {
 
   return {
     physicsObjects,
-    holePosition,
-    holeRadius
+    visualObjects: [
+      holeVisuals.hole,
+      holeVisuals.flagPole,
+      holeVisuals.flag
+    ],
+    holePosition: holeVisuals.holePosition,
+    holeRadius: holeVisuals.holeRadius
   };
 }
