@@ -163,6 +163,35 @@ export function addBoxObstacle(context, position, size, color = 0x8b4513) {
   );
 }
 
+// Fonction d'ajout d'obstacles cylindriques
+export function cylindreObstacles(
+  { scene, world, defaultMaterial },
+  position,
+  size,
+  color = 0xd2691e
+) {
+  const radius = size.radius ?? 0.5;
+  const height = size.height ?? 0.7;
+
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, height, 24),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+  );
+  mesh.position.set(position.x, position.y, position.z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const body = new CANNON.Body({
+    type: CANNON.Body.STATIC,
+    material: defaultMaterial,
+    shape: new CANNON.Cylinder(radius, radius, height, 24)
+  });
+  body.position.set(position.x, position.y, position.z);
+  world.addBody(body);
+
+  return { mesh, body };
+}
 
 
 

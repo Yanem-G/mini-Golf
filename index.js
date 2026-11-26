@@ -3,6 +3,7 @@ import * as CANNON from "cannon-es";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createMap as createMap1 } from "./map1.js";
 import { createMap as createMap2 } from "./map2.js";
+import { createMap as createMap3 } from "./map3.js";
 
 //renderer
 const renderer = new THREE.WebGLRenderer();
@@ -84,7 +85,7 @@ world.addBody(golfBody);
 const previousBallPosition = golfBody.position.clone();
 
 const physicsObjects = [];
-const mapFactories = [createMap1, createMap2];
+const mapFactories = [createMap1, createMap2, createMap3];
 let currentMapIndex = 0;
 let activeMap = mapFactories[currentMapIndex]({
   scene,
